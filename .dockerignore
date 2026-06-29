@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.env.*
+.git
+.github
+.next
+.vercel
+Dockerfile
+coverage
+node_modules
+npm-debug.log*
+out
+*.pem
+*.tsbuildinfo
+yarn-debug.log*
+yarn-error.log*

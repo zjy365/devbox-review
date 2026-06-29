@@ -1,31 +1,26 @@
-import { Sandbox } from "@vercel/sandbox";
 import { tool } from "ai";
 import { z } from "zod";
 
-const SANDBOX_CWD = ".";
+import { writeRuntimeFile } from "@/lib/runtime/devbox";
+import type { DevboxRuntime } from "@/lib/runtime/devbox";
 
 const writeFileStep = async (
-  sandboxId: string,
+  runtime: DevboxRuntime,
   path: string,
   content: string
 ): Promise<{ success: boolean }> => {
   "use step";
 
-  const sandbox = await Sandbox.get({ sandboxId });
-  const resolvedPath = path.startsWith("/") ? path : `${SANDBOX_CWD}/${path}`;
-
-  await sandbox.writeFiles([
-    { content: Buffer.from(content), path: resolvedPath },
-  ]);
+  await writeRuntimeFile(runtime, path, content);
 
   return { success: true };
 };
 
-export const createWriteFileTool = (sandboxId: string) =>
+export const createWriteFileTool = (runtime: DevboxRuntime) =>
   tool({
     description:
-      "Write content to a file in the sandbox. Creates parent directories if needed.",
-    execute: ({ content, path }) => writeFileStep(sandboxId, content, path),
+      "Write content to a file in the DevBox runtime. Creates parent directories if needed.",
+    execute: ({ content, path }) => writeFileStep(runtime, path, content),
     inputSchema: z.object({
       content: z.string().describe("The content to write to the file"),
       path: z.string().describe("The path where the file should be written"),

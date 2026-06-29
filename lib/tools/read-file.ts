@@ -1,30 +1,20 @@
-import { Sandbox } from "@vercel/sandbox";
 import { tool } from "ai";
 import { z } from "zod";
 
-const SANDBOX_CWD = ".";
+import { readRuntimeFile } from "@/lib/runtime/devbox";
+import type { DevboxRuntime } from "@/lib/runtime/devbox";
 
 const readFileStep = async (
-  sandboxId: string,
+  runtime: DevboxRuntime,
   path: string
-): Promise<{ content: string }> => {
-  "use step";
+): Promise<{ content: string }> => ({
+  content: await readRuntimeFile(runtime, path),
+});
 
-  const sandbox = await Sandbox.get({ sandboxId });
-  const resolvedPath = path.startsWith("/") ? path : `${SANDBOX_CWD}/${path}`;
-  const buffer = await sandbox.readFileToBuffer({ path: resolvedPath });
-
-  if (buffer === null) {
-    throw new Error(`File not found: ${resolvedPath}`);
-  }
-
-  return { content: buffer.toString("utf8") };
-};
-
-export const createReadFileTool = (sandboxId: string) =>
+export const createReadFileTool = (runtime: DevboxRuntime) =>
   tool({
-    description: "Read the contents of a file from the sandbox.",
-    execute: ({ path }) => readFileStep(sandboxId, path),
+    description: "Read the contents of a file from the DevBox runtime.",
+    execute: ({ path }) => readFileStep(runtime, path),
     inputSchema: z.object({
       path: z.string().describe("The path to the file to read"),
     }),

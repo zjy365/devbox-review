@@ -1,32 +1,33 @@
-import { Sandbox } from "@vercel/sandbox";
 import { tool } from "ai";
 import { z } from "zod";
 
-const SANDBOX_CWD = ".";
+import {
+  DEVBOX_WORKSPACE_DIR,
+  runWorkspaceCommand,
+} from "@/lib/runtime/devbox";
+import type { DevboxRuntime } from "@/lib/runtime/devbox";
 
 const runBashStep = async (
-  sandboxId: string,
+  runtime: DevboxRuntime,
   command: string
 ): Promise<{ exitCode: number; stderr: string; stdout: string }> => {
   "use step";
 
-  const sandbox = await Sandbox.get({ sandboxId });
-  const fullCommand = `export PATH="$HOME/.local/bin:$PATH" && cd "${SANDBOX_CWD}" && ${command}`;
-  const result = await sandbox.runCommand("bash", ["-c", fullCommand]);
-  const [stdout, stderr] = await Promise.all([
-    result.stdout(),
-    result.stderr(),
-  ]);
+  const result = await runWorkspaceCommand(runtime, command);
 
-  return { exitCode: result.exitCode, stderr, stdout };
+  return {
+    exitCode: result.exitCode,
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
 };
 
-export const createBashTool = (sandboxId: string) =>
+export const createBashTool = (runtime: DevboxRuntime) =>
   tool({
     description: [
-      "Execute bash commands in the sandbox environment.",
+      "Execute bash commands in the DevBox runtime environment.",
       "",
-      `WORKING DIRECTORY: ${SANDBOX_CWD}`,
+      `WORKING DIRECTORY: ${DEVBOX_WORKSPACE_DIR}`,
       "All commands execute from this directory. Use relative paths from here.",
       "",
       "Common operations:",
@@ -35,7 +36,7 @@ export const createBashTool = (sandboxId: string) =>
       "  grep -r 'pattern' . # Search file contents",
       "  cat <file>          # View file contents",
     ].join("\n"),
-    execute: ({ command }) => runBashStep(sandboxId, command),
+    execute: ({ command }) => runBashStep(runtime, command),
     inputSchema: z.object({
       command: z.string().describe("The bash command to execute"),
     }),

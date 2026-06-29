@@ -1,7 +1,7 @@
 import type { Octokit } from "octokit";
 
 import { parseError } from "@/lib/error";
-import { getInstallationOctokit } from "@/lib/github";
+import { getAppInfo, getInstallationOctokit } from "@/lib/github";
 
 export interface PushAccessResult {
   canPush: boolean;
@@ -54,19 +54,20 @@ const getErrorStatus = (error: unknown): number => {
 
 const checkBranchRestrictions = (
   restrictions: { apps?: { slug?: string }[] } | null | undefined,
-  branch: string
+  branch: string,
+  appSlug: string
 ): PushAccessResult | null => {
   if (!restrictions) {
     return null;
   }
 
   const allowedApps = restrictions.apps ?? [];
-  const isAppAllowed = allowedApps.some((app) => app.slug === "openreview");
+  const isAppAllowed = allowedApps.some((app) => app.slug === appSlug);
 
   if (!isAppAllowed && allowedApps.length > 0) {
     return {
       canPush: false,
-      reason: `Branch "${branch}" has push restrictions that don't include the OpenReview app`,
+      reason: `Branch "${branch}" has push restrictions that don't include the ${appSlug} app`,
     };
   }
 
@@ -77,7 +78,8 @@ const checkBranchProtection = async (
   octokit: Octokit,
   owner: string,
   repo: string,
-  branch: string
+  branch: string,
+  appSlug: string
 ): Promise<PushAccessResult | null> => {
   try {
     const { data } = await octokit.rest.repos.getBranchProtection({
@@ -86,7 +88,7 @@ const checkBranchProtection = async (
       repo,
     });
 
-    return checkBranchRestrictions(data.restrictions, branch);
+    return checkBranchRestrictions(data.restrictions, branch, appSlug);
   } catch (error) {
     const status = getErrorStatus(error);
     if (status === 404 || status === 403) {
@@ -100,7 +102,8 @@ const runAccessChecks = async (
   octokit: Octokit,
   owner: string,
   repo: string,
-  branch: string
+  branch: string,
+  appSlug: string
 ): Promise<PushAccessResult> => {
   const archived = await checkRepoArchived(octokit, owner, repo);
   if (archived) {
@@ -112,7 +115,13 @@ const runAccessChecks = async (
     return permissions;
   }
 
-  const protection = await checkBranchProtection(octokit, owner, repo, branch);
+  const protection = await checkBranchProtection(
+    octokit,
+    owner,
+    repo,
+    branch,
+    appSlug
+  );
   if (protection) {
     return protection;
   }
@@ -134,5 +143,11 @@ export const checkPushAccess = async (
     );
   });
 
-  return runAccessChecks(octokit, owner, repo, branch);
+  const appInfo = await getAppInfo().catch((error: unknown) => {
+    throw new Error(
+      `[checkPushAccess] Failed to get GitHub app info: ${parseError(error)}`
+    );
+  });
+
+  return runAccessChecks(octokit, owner, repo, branch, appInfo.slug);
 };

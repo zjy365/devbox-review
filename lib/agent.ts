@@ -1,5 +1,6 @@
 import { DurableAgent } from "@workflow/ai/agent";
 
+import type { DevboxRuntime } from "@/lib/runtime/devbox";
 import type { SkillMetadata } from "@/lib/skills";
 import { buildSkillsPrompt } from "@/lib/skills";
 import { createBashTool } from "@/lib/tools/bash";
@@ -8,11 +9,11 @@ import { createReadFileTool } from "@/lib/tools/read-file";
 import { createReplyTool } from "@/lib/tools/reply";
 import { createWriteFileTool } from "@/lib/tools/write-file";
 
-const instructions = `You are an expert software engineering assistant working inside a sandbox with a git repository checked out on a PR branch.
+const instructions = `You are an expert software engineering assistant working inside a Sealos DevBox runtime with a git repository checked out on a PR branch.
 
 You have the following tools:
 
-- **bash / readFile / writeFile** — run commands, read and write files inside the sandbox
+- **bash / readFile / writeFile** — run commands, read and write files inside the DevBox runtime
 - **reply** — post a top-level comment on the pull request
 - **loadSkill** — load specialized review instructions for a specific domain
 
@@ -56,13 +57,13 @@ Based on the user's request, decide what to do. Your capabilities include:
 - Always reply at least once with your findings or actions taken
 - Format replies as markdown
 - Be concise and actionable
-- End every reply with a line break, a horizontal rule, then: *Powered by [OpenReview](https://github.com/vercel-labs/openreview)*
+- End every reply with a line break, a horizontal rule, then: *Powered by [DevBox Review](https://github.com/zjy365/devbox-review)*
 
 ## Getting Started
 - Start by running \`gh pr diff {{PR_NUMBER}}\` to see what changed in this PR`;
 
 export const createAgent = (
-  sandboxId: string,
+  runtime: DevboxRuntime,
   threadId: string,
   prNumber: number,
   repoFullName: string,
@@ -82,11 +83,11 @@ export const createAgent = (
     model: "anthropic/claude-sonnet-4.6",
     system,
     tools: {
-      bash: createBashTool(sandboxId),
+      bash: createBashTool(runtime),
       loadSkill: createLoadSkillTool(skills),
-      readFile: createReadFileTool(sandboxId),
+      readFile: createReadFileTool(runtime),
       reply: createReplyTool(threadId),
-      writeFile: createWriteFileTool(sandboxId),
+      writeFile: createWriteFileTool(runtime),
     },
   });
 };

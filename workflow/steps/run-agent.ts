@@ -3,6 +3,7 @@ import { getWritable } from "workflow";
 
 import { createAgent } from "@/lib/agent";
 import { parseError } from "@/lib/error";
+import type { DevboxRuntime } from "@/lib/runtime/devbox";
 import type { ThreadMessage } from "@/workflow";
 
 import { discoverSkills } from "./discover-skills";
@@ -14,7 +15,7 @@ export interface AgentResult {
 }
 
 export const runAgent = async (
-  sandboxId: string,
+  runtime: DevboxRuntime,
   threadMessages: ThreadMessage[],
   threadId: string,
   prNumber: number,
@@ -26,7 +27,7 @@ export const runAgent = async (
     const skills = await discoverSkills([".agents/skills"]);
 
     const agent = createAgent(
-      sandboxId,
+      runtime,
       threadId,
       prNumber,
       repoFullName,

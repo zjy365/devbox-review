@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   description:
-    "An open-source, self-hosted AI code review bot. Deploy to Vercel, connect a GitHub App, and get automated PR reviews powered by Claude.",
-  title: "OpenReview",
+    "An open-source, self-hosted AI PR review bot powered by Sealos DevBox runtimes.",
+  title: "DevBox Review",
 };
 
 export default function RootLayout({

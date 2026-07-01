@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: devbox-review-web
+  namespace: devbox-review
+  labels:
+    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/component: web
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: devbox-review.192.168.10.189.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: devbox-review-web
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - devbox-review.192.168.10.189.nip.io
+      secretName: wildcard-cert

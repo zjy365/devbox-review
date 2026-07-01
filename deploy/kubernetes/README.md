@@ -48,6 +48,7 @@ kubectl apply -f deploy/kubernetes/configmap.yaml
 kubectl apply -f /tmp/devbox-review-secret.yaml
 kubectl apply -f deploy/kubernetes/redis.yaml
 kubectl apply -f deploy/kubernetes/deployment.yaml
+kubectl apply -f deploy/kubernetes/ingress.yaml
 ```
 
 Point your Ingress or platform HTTP route to:
@@ -62,6 +63,12 @@ The GitHub App webhook URL should be:
 
 ```text
 https://your-domain.example/api/webhooks
+```
+
+The included dev ingress uses:
+
+```text
+https://devbox-review.192.168.10.189.nip.io/api/webhooks
 ```
 
 ## Verify

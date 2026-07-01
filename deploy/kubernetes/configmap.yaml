@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devbox-review-config
+  namespace: devbox-review
+data:
+  NODE_ENV: production
+  OPENREVIEW_MODEL_PROVIDER: openai
+  OPENREVIEW_MODEL: gpt-5.1
+  OPENREVIEW_WORKER_CONCURRENCY: "1"
+  OPENREVIEW_JOB_ATTEMPTS: "3"
+  OPENREVIEW_JOB_BACKOFF_MS: "30000"
+  DEVBOX_KUBECONFIG_PATH: /var/run/secrets/devbox/kubeconfig
+  DEVBOX_JWT_TTL_SECONDS: "14400"
+  DEVBOX_ARCHIVE_AFTER_PAUSE_TIME: 24h
+  DEVBOX_PAUSE_AFTER_MINUTES: "300"
+  DEVBOX_COMMAND_TIMEOUT_SECONDS: "60"

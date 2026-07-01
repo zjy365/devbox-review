@@ -8,7 +8,8 @@ RUN bun install --frozen-lockfile --registry=https://registry.npmjs.org
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN bun run build
+RUN apk add --no-cache nodejs \
+  && node node_modules/next/dist/bin/next build
 RUN bun build worker/review-worker.ts --compile --outfile /app/.build/review-worker
 
 FROM base AS web

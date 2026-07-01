@@ -1,4 +1,3 @@
-import "server-only";
 import {
   createDevbox,
   DevboxApiError,
@@ -12,7 +11,6 @@ import {
 import {
   getDevboxArchiveAfterPauseTime,
   getDevboxCommandTimeoutSeconds,
-  getDevboxDefaultImage,
   getDevboxNamespace,
   getDevboxPauseAfterMinutes,
 } from "@/lib/devbox/config";
@@ -70,6 +68,27 @@ const authenticatedRepoUrl = (repoFullName: string, token: string): string => {
   return url.toString();
 };
 
+const publicRepoUrl = (repoFullName: string): string =>
+  `https://github.com/${repoFullName}.git`;
+
+const resolveWorkspacePathCommand = (
+  runtime: DevboxRuntime,
+  path: string
+): string =>
+  [
+    `requested=${shellQuote(path)}`,
+    `workspace=${shellQuote(runtime.workspaceDir)}`,
+    'case "$requested" in',
+    '  /*) candidate="$requested" ;;',
+    '  *) candidate="$workspace/$requested" ;;',
+    "esac",
+    'resolved="$(realpath -m -- "$candidate")"',
+    'case "$resolved" in',
+    '  "$workspace"|"$workspace"/*) ;;',
+    '  *) echo "Path outside workspace is not allowed: $requested" >&2; exit 64 ;;',
+    "esac",
+  ].join("\n");
+
 export const runDevboxCommand = async (
   runtime: DevboxRuntime,
   command: string,
@@ -92,6 +111,7 @@ export const runWorkspaceCommand = async (
     [
       "set -euo pipefail",
       'export PATH="$HOME/.local/bin:$PATH"',
+      "unset GITHUB_TOKEN GH_TOKEN GITHUB_AUTH_TOKEN",
       `cd ${shellQuote(runtime.workspaceDir)}`,
       command,
     ].join("\n"),
@@ -120,6 +140,11 @@ const cloneWorkspaceCommand = (input: CreateDevboxRuntimeInput): string => {
     '  find "$workspace_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +',
     '  cp -a "$tmpdir/repo"/. "$workspace_dir"/',
     "fi",
+    `git -C "$workspace_dir" fetch --depth 1 ${shellQuote(repo)} ${shellQuote(input.branch)}`,
+    'git -C "$workspace_dir" reset --hard FETCH_HEAD',
+    'git -C "$workspace_dir" clean -fd',
+    `git -C "$workspace_dir" remote set-url origin ${shellQuote(publicRepoUrl(input.repoFullName))}`,
+    'rm -f "$HOME/.config/gh/hosts.yml"',
     "if id devbox >/dev/null 2>&1; then",
     '  if [ "$(id -u)" = "0" ]; then',
     '    chown -R devbox:devbox "$workspace_dir"',
@@ -196,9 +221,7 @@ export const createDevboxRuntime = async (
     env: {
       DEVBOX_REVIEW_REPOSITORY: input.repoFullName,
       DEVBOX_REVIEW_WORKSPACE: DEVBOX_WORKSPACE_DIR,
-      GITHUB_TOKEN: input.token,
     },
-    image: getDevboxDefaultImage(),
     labels: [
       { key: "app.kubernetes.io/managed-by", value: "devbox-review" },
       { key: "app.kubernetes.io/component", value: "agent-runtime" },
@@ -296,7 +319,7 @@ export const hasRuntimeChanges = async (
 ): Promise<boolean> => {
   const result = await runWorkspaceCommand(
     runtime,
-    "git diff --name-only",
+    "git status --porcelain",
     GIT_COMMAND_TIMEOUT_SECONDS
   );
   if (result.exitCode !== 0) {
@@ -334,16 +357,15 @@ export const readRuntimeFile = async (
   runtime: DevboxRuntime,
   path: string
 ): Promise<string> => {
-  const resolvedPath = path.startsWith("/")
-    ? path
-    : `${runtime.workspaceDir}/${path}`;
   const result = await runDevboxCommand(
     runtime,
-    `cat -- ${shellQuote(resolvedPath)}`,
+    [resolveWorkspacePathCommand(runtime, path), 'cat -- "$resolved"'].join(
+      "\n"
+    ),
     FILE_COMMAND_TIMEOUT_SECONDS
   );
   if (result.exitCode !== 0) {
-    throw new Error(`File not found: ${resolvedPath}`);
+    throw new Error(`Failed to read file: ${result.stderr || result.stdout}`);
   }
   return result.stdout;
 };
@@ -353,16 +375,14 @@ export const writeRuntimeFile = async (
   path: string,
   content: string
 ): Promise<void> => {
-  const resolvedPath = path.startsWith("/")
-    ? path
-    : `${runtime.workspaceDir}/${path}`;
   const encoded = Buffer.from(content, "utf8").toString("base64");
   const result = await runDevboxCommand(
     runtime,
     [
       "set -euo pipefail",
-      `mkdir -p -- "$(dirname -- ${shellQuote(resolvedPath)})"`,
-      `base64 -d > ${shellQuote(resolvedPath)} <<'EOF'`,
+      resolveWorkspacePathCommand(runtime, path),
+      'mkdir -p -- "$(dirname -- "$resolved")"',
+      "base64 -d > \"$resolved\" <<'EOF'",
       encoded,
       "EOF",
     ].join("\n"),

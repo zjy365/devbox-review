@@ -1,5 +1,6 @@
 import type { Octokit } from "octokit";
 
+import { getBot } from "@/lib/bot";
 import { parseError } from "@/lib/error";
 import { getAppInfo, getInstallationOctokit } from "@/lib/github";
 
@@ -7,6 +8,24 @@ export interface PushAccessResult {
   canPush: boolean;
   reason?: string;
 }
+
+export const addPRComment = async (
+  threadId: string,
+  body: string
+): Promise<void> => {
+  const bot = await getBot();
+  const adapter = bot.getAdapter("github");
+  await adapter.postMessage(threadId, { markdown: body });
+};
+
+export const startTyping = async (
+  threadId: string,
+  text: string
+): Promise<void> => {
+  const bot = await getBot();
+  const adapter = bot.getAdapter("github");
+  await adapter.startTyping(threadId, text);
+};
 
 const checkRepoArchived = async (
   octokit: Octokit,
@@ -26,9 +45,9 @@ const checkRepoArchived = async (
 };
 
 const checkInstallationPermissions = async (
-  octokit: Octokit
+  octokit: Octokit,
+  installationId: number
 ): Promise<PushAccessResult | null> => {
-  const installationId = Number(process.env.GITHUB_APP_INSTALLATION_ID);
   const { data } = await octokit.rest.apps.getInstallation({
     installation_id: installationId,
   });
@@ -100,6 +119,7 @@ const checkBranchProtection = async (
 
 const runAccessChecks = async (
   octokit: Octokit,
+  installationId: number,
   owner: string,
   repo: string,
   branch: string,
@@ -110,7 +130,10 @@ const runAccessChecks = async (
     return archived;
   }
 
-  const permissions = await checkInstallationPermissions(octokit);
+  const permissions = await checkInstallationPermissions(
+    octokit,
+    installationId
+  );
   if (permissions) {
     return permissions;
   }
@@ -130,18 +153,23 @@ const runAccessChecks = async (
 };
 
 export const checkPushAccess = async (
+  installationId: number,
   repoFullName: string,
   branch: string
 ): Promise<PushAccessResult> => {
-  "use step";
-
   const [owner, repo] = repoFullName.split("/");
 
-  const octokit = await getInstallationOctokit().catch((error: unknown) => {
-    throw new Error(
-      `[checkPushAccess] Failed to get GitHub client: ${parseError(error)}`
-    );
-  });
+  if (!owner || !repo) {
+    throw new Error(`Invalid repository name: ${repoFullName}`);
+  }
+
+  const octokit = await getInstallationOctokit(installationId).catch(
+    (error: unknown) => {
+      throw new Error(
+        `[checkPushAccess] Failed to get GitHub client: ${parseError(error)}`
+      );
+    }
+  );
 
   const appInfo = await getAppInfo().catch((error: unknown) => {
     throw new Error(
@@ -149,5 +177,32 @@ export const checkPushAccess = async (
     );
   });
 
-  return runAccessChecks(octokit, owner, repo, branch, appInfo.slug);
+  return runAccessChecks(
+    octokit,
+    installationId,
+    owner,
+    repo,
+    branch,
+    appInfo.slug
+  );
+};
+
+export const getGitHubToken = async (
+  installationId: number
+): Promise<string> => {
+  const octokit = await getInstallationOctokit(installationId).catch(
+    (error: unknown) => {
+      throw new Error(
+        `[getGitHubToken] Failed to get GitHub client: ${parseError(error)}`
+      );
+    }
+  );
+
+  const auth = await (
+    octokit.auth({ type: "installation" }) as Promise<{ token: string }>
+  ).catch((error: unknown) => {
+    throw new Error(`Failed to get GitHub token: ${parseError(error)}`);
+  });
+
+  return auth.token;
 };

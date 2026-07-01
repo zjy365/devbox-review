@@ -1,20 +1,15 @@
-import "server-only";
+import { existsSync, readFileSync } from "node:fs";
+
+import { KubeConfig } from "@kubernetes/client-node";
 import { SignJWT } from "jose";
 
 import { env } from "@/lib/env";
 
 const DEVBOX_API_PREFIX = "/api/v1/devbox";
 const DEFAULT_DEVBOX_TOKEN_TTL_SECONDS = 4 * 60 * 60;
+const DEVBOX_SERVER_PREFIX = "devbox-server.";
 const DNS_1123_LABEL_RE = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 const TRAILING_SLASHES_RE = /\/+$/;
-
-const required = (value: string | undefined, name: string): string => {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return trimmed;
-};
 
 const normalizeBaseUrl = (url: string): string =>
   url.trim().replace(TRAILING_SLASHES_RE, "");
@@ -27,18 +22,106 @@ export const validateDevboxNamespace = (namespace: string): string => {
   return trimmed;
 };
 
+interface DevboxKubeconfigSettings {
+  namespace: string;
+  server: string;
+  token: string;
+}
+
+let cachedKubeconfigSettings: DevboxKubeconfigSettings | undefined;
+
+const optionalTrimmed = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+};
+
+const required = (value: string | undefined, name: string): string => {
+  const trimmed = optionalTrimmed(value);
+  if (!trimmed) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return trimmed;
+};
+
+const getKubeconfigPath = (): string => {
+  const path = optionalTrimmed(env.DEVBOX_KUBECONFIG_PATH);
+  if (!path) {
+    throw new Error("Missing DEVBOX_KUBECONFIG_PATH environment variable");
+  }
+  return path;
+};
+
+const readKubeconfigContent = (): string => {
+  const path = getKubeconfigPath();
+  if (!existsSync(path)) {
+    throw new Error(`DevBox kubeconfig file does not exist: ${path}`);
+  }
+  return readFileSync(path, "utf8");
+};
+
+const inferDevboxBaseUrl = (server: string): string => {
+  const url = new URL(server);
+  const hostname = url.hostname.startsWith(DEVBOX_SERVER_PREFIX)
+    ? url.hostname
+    : `${DEVBOX_SERVER_PREFIX}${url.hostname}`;
+  return normalizeBaseUrl(`${url.protocol}//${hostname}`);
+};
+
+const getKubeconfigSettings = (): DevboxKubeconfigSettings => {
+  if (cachedKubeconfigSettings) {
+    return cachedKubeconfigSettings;
+  }
+
+  const content = readKubeconfigContent();
+  const kubeconfig = new KubeConfig();
+  kubeconfig.loadFromString(content);
+
+  const currentContextName = kubeconfig.getCurrentContext();
+  if (!currentContextName) {
+    throw new Error("DevBox kubeconfig must define current-context");
+  }
+
+  const currentContext = kubeconfig.getContextObject(currentContextName);
+  const currentCluster = kubeconfig.getCurrentCluster();
+  const currentUser = kubeconfig.getCurrentUser();
+
+  if (!currentContext) {
+    throw new Error(
+      `DevBox kubeconfig current-context was not found: ${currentContextName}`
+    );
+  }
+
+  if (!currentCluster?.server) {
+    throw new Error(
+      "DevBox kubeconfig current context must reference a cluster"
+    );
+  }
+
+  if (!currentUser?.token) {
+    throw new Error(
+      "DevBox kubeconfig current context user must include a bearer token"
+    );
+  }
+
+  if (!currentContext.namespace) {
+    throw new Error("DevBox kubeconfig current context must include namespace");
+  }
+
+  cachedKubeconfigSettings = {
+    namespace: validateDevboxNamespace(currentContext.namespace),
+    server: currentCluster.server,
+    token: currentUser.token,
+  };
+  return cachedKubeconfigSettings;
+};
+
 export const getDevboxBaseUrl = (): string =>
-  normalizeBaseUrl(required(env.DEVBOX_API_BASE_URL, "DEVBOX_API_BASE_URL"));
+  inferDevboxBaseUrl(getKubeconfigSettings().server);
 
 export const getDevboxApiPrefix = (): string => DEVBOX_API_PREFIX;
 
 export const getDevboxNamespace = (): string =>
-  validateDevboxNamespace(required(env.DEVBOX_NAMESPACE, "DEVBOX_NAMESPACE"));
-
-export const getDevboxDefaultImage = (): string | undefined => {
-  const image = env.DEVBOX_RUNTIME_IMAGE?.trim();
-  return image || undefined;
-};
+  getKubeconfigSettings().namespace;
 
 export const getDevboxArchiveAfterPauseTime = (): string =>
   env.DEVBOX_ARCHIVE_AFTER_PAUSE_TIME?.trim() || "24h";
@@ -67,15 +150,6 @@ export const getDevboxAuthToken = async (
   namespace: string,
   nowSeconds = Math.floor(Date.now() / 1000)
 ): Promise<string> => {
-  const staticToken = env.DEVBOX_TOKEN?.trim();
-  if (staticToken) {
-    return staticToken;
-  }
-
-  const signingKey = required(
-    env.DEVBOX_JWT_SIGNING_KEY,
-    "DEVBOX_JWT_SIGNING_KEY"
-  );
   const ttlSeconds = Number.parseInt(
     env.DEVBOX_JWT_TTL_SECONDS ?? String(DEFAULT_DEVBOX_TOKEN_TTL_SECONDS),
     10
@@ -89,5 +163,9 @@ export const getDevboxAuthToken = async (
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt(nowSeconds)
     .setExpirationTime(nowSeconds + ttlSeconds)
-    .sign(new TextEncoder().encode(signingKey));
+    .sign(
+      new TextEncoder().encode(
+        required(env.DEVBOX_JWT_SIGNING_KEY, "DEVBOX_JWT_SIGNING_KEY")
+      )
+    );
 };

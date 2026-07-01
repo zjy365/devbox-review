@@ -1,4 +1,3 @@
-import "server-only";
 import { App } from "octokit";
 import type { Octokit } from "octokit";
 
@@ -27,20 +26,18 @@ export const getGitHubApp = (): App => {
   return app;
 };
 
-export const getInstallationOctokit = (): Promise<Octokit> => {
-  if (!env.GITHUB_APP_INSTALLATION_ID) {
-    throw new Error("Missing GITHUB_APP_INSTALLATION_ID environment variable");
-  }
-
+export const getInstallationOctokit = (
+  installationId: number
+): Promise<Octokit> => {
   const githubApp = getGitHubApp();
-  return githubApp.getInstallationOctokit(env.GITHUB_APP_INSTALLATION_ID);
+  return githubApp.getInstallationOctokit(installationId);
 };
 
 export const getAppInfo = async (): Promise<{
   botUserId: number;
   slug: string;
 }> => {
-  const octokit = await getInstallationOctokit();
+  const { octokit } = getGitHubApp();
   const { data: appData } = (await octokit.request("GET /app")) as {
     data: { slug: string };
   };

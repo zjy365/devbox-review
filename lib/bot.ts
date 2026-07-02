@@ -55,9 +55,6 @@ const getInstallationId = async (repoFullName: string): Promise<number> => {
 };
 
 const handleMention = async (thread: Thread, message: Message) => {
-  await thread.adapter.addReaction(thread.id, message.id, emoji.eyes);
-
-  const messages = await collectMessages(thread);
   const raw = message.raw as GitHubRawMessage;
 
   const repoFullName = raw.repository.full_name;
@@ -84,7 +81,7 @@ const handleMention = async (thread: Thread, message: Message) => {
   const jobId = await enqueueReviewJob({
     baseBranch: pr.base.ref,
     installationId,
-    messages,
+    messages: [{ content: message.text, role: "user" }],
     prBranch: pr.head.ref,
     prNumber,
     repoFullName,

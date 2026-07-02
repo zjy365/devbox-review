@@ -1,8 +1,7 @@
 import type { Octokit } from "octokit";
 
-import { getBot } from "@/lib/bot";
 import { parseError } from "@/lib/error";
-import { getAppInfo, getInstallationOctokit } from "@/lib/github";
+import { getConfiguredAppSlug, getInstallationOctokit } from "@/lib/github";
 
 export interface PushAccessResult {
   canPush: boolean;
@@ -10,21 +9,28 @@ export interface PushAccessResult {
 }
 
 export const addPRComment = async (
+  installationId: number,
   threadId: string,
   body: string
 ): Promise<void> => {
-  const bot = await getBot();
-  const adapter = bot.getAdapter("github");
-  await adapter.postMessage(threadId, { markdown: body });
+  const match = threadId.match(/^github:([^/]+)\/([^:]+):(\d+)$/);
+  if (!match) {
+    throw new Error(`Unsupported GitHub thread ID: ${threadId}`);
+  }
+
+  const [, owner, repo, prNumber] = match;
+  const octokit = await getInstallationOctokit(installationId);
+  await octokit.rest.issues.createComment({
+    body,
+    issue_number: Number.parseInt(prNumber, 10),
+    owner,
+    repo,
+  });
 };
 
-export const startTyping = async (
-  threadId: string,
-  text: string
-): Promise<void> => {
-  const bot = await getBot();
-  const adapter = bot.getAdapter("github");
-  await adapter.startTyping(threadId, text);
+export const startTyping = (threadId: string, text: string): Promise<void> => {
+  console.log(`[github] ${threadId}: ${text}`);
+  return Promise.resolve();
 };
 
 const checkRepoArchived = async (
@@ -171,19 +177,13 @@ export const checkPushAccess = async (
     }
   );
 
-  const appInfo = await getAppInfo().catch((error: unknown) => {
-    throw new Error(
-      `[checkPushAccess] Failed to get GitHub app info: ${parseError(error)}`
-    );
-  });
-
   return runAccessChecks(
     octokit,
     installationId,
     owner,
     repo,
     branch,
-    appInfo.slug
+    getConfiguredAppSlug()
   );
 };
 

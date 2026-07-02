@@ -10,7 +10,9 @@ const buildJobId = (data: ReviewJobData): string =>
     data.prNumber,
     data.triggerId ?? data.threadId,
     Date.now(),
-  ].join(":");
+  ]
+    .join("-")
+    .replaceAll(/[^A-Za-z0-9._-]/g, "-");
 
 export const enqueueReviewJob = async (
   data: ReviewJobData

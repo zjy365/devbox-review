@@ -45,7 +45,6 @@ export interface CreateDevboxInput {
   labels?: CreateDevboxLabel[];
   name: string;
   pauseAt?: string;
-  storageLimit?: string;
   upstreamID?: string;
 }
 

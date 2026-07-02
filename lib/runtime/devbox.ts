@@ -1,3 +1,5 @@
+import { setTimeout } from "node:timers/promises";
+
 import {
   createDevbox,
   DevboxApiError,
@@ -11,8 +13,10 @@ import {
 import {
   getDevboxArchiveAfterPauseTime,
   getDevboxCommandTimeoutSeconds,
+  getDevboxCustomObjectsApi,
   getDevboxNamespace,
   getDevboxPauseAfterMinutes,
+  getDevboxStorageLimit,
 } from "@/lib/devbox/config";
 import type { DevboxInfo, DevboxExecResult } from "@/lib/devbox/types";
 
@@ -23,6 +27,13 @@ const GITHUB_CLI_INSTALL_TIMEOUT_SECONDS = 180;
 const DEPENDENCY_INSTALL_TIMEOUT_SECONDS = 600;
 const GIT_COMMAND_TIMEOUT_SECONDS = 120;
 const FILE_COMMAND_TIMEOUT_SECONDS = 60;
+const DEVBOX_INFO_READY_MAX_RETRIES = 3;
+const DEVBOX_INFO_READY_RETRY_DELAY_MS = 2000;
+const DEVBOX_STORAGE_PATCH_MAX_RETRIES = 5;
+const DEVBOX_STORAGE_PATCH_RETRY_DELAY_MS = 1000;
+const DEVBOX_CRD_GROUP = "devbox.sealos.io";
+const DEVBOX_CRD_VERSION = "v1alpha2";
+const DEVBOX_CRD_PLURAL = "devboxes";
 
 export interface DevboxRuntime {
   name: string;
@@ -70,6 +81,10 @@ const authenticatedRepoUrl = (repoFullName: string, token: string): string => {
 
 const publicRepoUrl = (repoFullName: string): string =>
   `https://github.com/${repoFullName}.git`;
+
+const isDevboxRuntimePendingError = (error: unknown): error is DevboxApiError =>
+  error instanceof DevboxApiError &&
+  (error.status === 404 || error.status >= 500);
 
 const resolveWorkspacePathCommand = (
   runtime: DevboxRuntime,
@@ -132,6 +147,7 @@ const cloneWorkspaceCommand = (input: CreateDevboxRuntimeInput): string => {
     "set -euo pipefail",
     `workspace_dir=${shellQuote(DEVBOX_WORKSPACE_DIR)}`,
     'mkdir -p "$workspace_dir"',
+    'git config --global --get-all safe.directory | grep -Fx "$workspace_dir" >/dev/null 2>&1 || git config --global --add safe.directory "$workspace_dir"',
     'if [ ! -d "$workspace_dir/.git" ]; then',
     '  tmpdir="$(mktemp -d)"',
     '  cleanup() { rm -rf "$tmpdir"; }',
@@ -139,10 +155,14 @@ const cloneWorkspaceCommand = (input: CreateDevboxRuntimeInput): string => {
     `  git clone --depth 1 --branch ${shellQuote(input.branch)} ${shellQuote(repo)} "$tmpdir/repo"`,
     '  find "$workspace_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +',
     '  cp -a "$tmpdir/repo"/. "$workspace_dir"/',
+    "else",
+    '  rm -f "$workspace_dir/.git/index.lock" "$workspace_dir/.git/shallow.lock"',
+    '  git -C "$workspace_dir" reset --hard || true',
+    '  git -C "$workspace_dir" clean -ffdx || true',
     "fi",
     `git -C "$workspace_dir" fetch --depth 1 ${shellQuote(repo)} ${shellQuote(input.branch)}`,
     'git -C "$workspace_dir" reset --hard FETCH_HEAD',
-    'git -C "$workspace_dir" clean -fd',
+    'git -C "$workspace_dir" clean -ffdx',
     `git -C "$workspace_dir" remote set-url origin ${shellQuote(publicRepoUrl(input.repoFullName))}`,
     'rm -f "$HOME/.config/gh/hosts.yml"',
     "if id devbox >/dev/null 2>&1; then",
@@ -161,11 +181,62 @@ const buildRuntime = (name: string, namespace: string): DevboxRuntime => ({
   workspaceDir: DEVBOX_WORKSPACE_DIR,
 });
 
+const formatErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+const patchDevboxRuntimeStorageLimit = async (
+  runtime: DevboxRuntime
+): Promise<void> => {
+  const storageLimit = getDevboxStorageLimit();
+  const body = [
+    { op: "add", path: "/spec/storageLimit", value: storageLimit },
+    {
+      op: "add",
+      path: "/spec/resource/ephemeral-storage",
+      value: storageLimit,
+    },
+  ];
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await getDevboxCustomObjectsApi().patchNamespacedCustomObject({
+        body,
+        group: DEVBOX_CRD_GROUP,
+        name: runtime.name,
+        namespace: runtime.namespace,
+        plural: DEVBOX_CRD_PLURAL,
+        version: DEVBOX_CRD_VERSION,
+      });
+      return;
+    } catch (error) {
+      if (attempt >= DEVBOX_STORAGE_PATCH_MAX_RETRIES) {
+        throw new Error(
+          `Failed to patch DevBox storage limit: ${formatErrorMessage(error)}`,
+          { cause: error }
+        );
+      }
+      await setTimeout(DEVBOX_STORAGE_PATCH_RETRY_DELAY_MS);
+    }
+  }
+};
+
 export const getDevboxRuntimeInfo = async (
   runtime: DevboxRuntime
 ): Promise<DevboxInfo> => {
-  const response = await getDevbox(runtime.namespace, runtime.name);
-  return response.data;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const response = await getDevbox(runtime.namespace, runtime.name);
+      return response.data;
+    } catch (error) {
+      if (
+        !isDevboxRuntimePendingError(error) ||
+        attempt >= DEVBOX_INFO_READY_MAX_RETRIES
+      ) {
+        throw error;
+      }
+      await setTimeout(DEVBOX_INFO_READY_RETRY_DELAY_MS);
+    }
+  }
 };
 
 export const resumeDevboxRuntime = async (
@@ -231,7 +302,9 @@ export const createDevboxRuntime = async (
     upstreamID,
   });
 
-  return buildRuntime(name, namespace);
+  const runtime = buildRuntime(name, namespace);
+  await patchDevboxRuntimeStorageLimit(runtime);
+  return runtime;
 };
 
 export const pauseDevboxRuntime = async (

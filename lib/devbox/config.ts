@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 
-import { KubeConfig } from "@kubernetes/client-node";
+import { CustomObjectsApi, KubeConfig } from "@kubernetes/client-node";
 import { SignJWT } from "jose";
 
 import { env } from "@/lib/env";
 
 const DEVBOX_API_PREFIX = "/api/v1/devbox";
 const DEFAULT_DEVBOX_TOKEN_TTL_SECONDS = 4 * 60 * 60;
+const DEFAULT_DEVBOX_STORAGE_LIMIT = "20Gi";
 const DEVBOX_SERVER_PREFIX = "devbox-server.";
 const DNS_1123_LABEL_RE = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
 const TRAILING_SLASHES_RE = /\/+$/;
@@ -29,6 +30,7 @@ interface DevboxKubeconfigSettings {
 }
 
 let cachedKubeconfigSettings: DevboxKubeconfigSettings | undefined;
+let cachedKubeconfig: KubeConfig | undefined;
 
 const optionalTrimmed = (value: string | undefined): string | undefined => {
   const trimmed = value?.trim();
@@ -46,17 +48,35 @@ const required = (value: string | undefined, name: string): string => {
 const getKubeconfigPath = (): string => {
   const path = optionalTrimmed(env.DEVBOX_KUBECONFIG_PATH);
   if (!path) {
-    throw new Error("Missing DEVBOX_KUBECONFIG_PATH environment variable");
+    throw new Error(
+      "Missing DEVBOX_KUBECONFIG or DEVBOX_KUBECONFIG_PATH environment variable"
+    );
   }
   return path;
 };
 
 const readKubeconfigContent = (): string => {
+  const inlineKubeconfig = optionalTrimmed(env.DEVBOX_KUBECONFIG);
+  if (inlineKubeconfig) {
+    return inlineKubeconfig;
+  }
+
   const path = getKubeconfigPath();
   if (!existsSync(path)) {
     throw new Error(`DevBox kubeconfig file does not exist: ${path}`);
   }
   return readFileSync(path, "utf8");
+};
+
+const getKubeconfig = (): KubeConfig => {
+  if (cachedKubeconfig) {
+    return cachedKubeconfig;
+  }
+
+  const kubeconfig = new KubeConfig();
+  kubeconfig.loadFromString(readKubeconfigContent());
+  cachedKubeconfig = kubeconfig;
+  return cachedKubeconfig;
 };
 
 const inferDevboxBaseUrl = (server: string): string => {
@@ -72,9 +92,7 @@ const getKubeconfigSettings = (): DevboxKubeconfigSettings => {
     return cachedKubeconfigSettings;
   }
 
-  const content = readKubeconfigContent();
-  const kubeconfig = new KubeConfig();
-  kubeconfig.loadFromString(content);
+  const kubeconfig = getKubeconfig();
 
   const currentContextName = kubeconfig.getCurrentContext();
   if (!currentContextName) {
@@ -145,6 +163,12 @@ export const getDevboxCommandTimeoutSeconds = (): number => {
   }
   return seconds;
 };
+
+export const getDevboxStorageLimit = (): string =>
+  env.DEVBOX_STORAGE_LIMIT?.trim() || DEFAULT_DEVBOX_STORAGE_LIMIT;
+
+export const getDevboxCustomObjectsApi = (): CustomObjectsApi =>
+  getKubeconfig().makeApiClient(CustomObjectsApi);
 
 export const getDevboxAuthToken = async (
   namespace: string,

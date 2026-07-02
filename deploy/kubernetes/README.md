@@ -1,50 +1,62 @@
 # Kubernetes Deployment
 
-This directory deploys DevBox Review with the long-term production shape:
+This directory deploys DevBox Review with the production shape:
 
-- one web image and one worker image
-- one public `web` Deployment and Service
-- one private `worker` Deployment
+- one app image
+- one public `app` Deployment and Service
 - one Redis queue
 
-Only the web Service needs external ingress. The worker does not receive HTTP traffic; it consumes jobs from Redis.
+Only the app Service receives external ingress. The same Next.js server process
+also starts the BullMQ worker and consumes jobs from Redis.
 
 ## Build and push the image
 
 ```bash
 docker buildx build --platform linux/amd64 \
-  --target web \
-  -t zhujingyang/devbox-review-web:latest \
-  --push .
-
-docker buildx build --platform linux/amd64 \
-  --target worker \
-  -t zhujingyang/devbox-review-worker:latest \
+  --target app \
+  -t zhujingyang/devbox-review:latest \
   --push .
 ```
 
 For production, use an immutable tag instead of `latest`, then update `deployment.yaml`.
 
-## Configure secrets
+## Configure environment
 
-Edit `secret.example.yaml`, replace every placeholder, paste your Sealos
-kubeconfig under `DEVBOX_KUBECONFIG`, and apply it as a Secret. The Deployment
-mounts that kubeconfig key as `/var/run/secrets/devbox/kubeconfig` and injects
-only the specific secret keys each container needs.
+The Kubernetes manifests read runtime configuration from a Secret named
+`devbox-review-secret`. Create it from your local `.env` and kubeconfig before
+applying the Deployments.
 
-```bash
-cp deploy/kubernetes/secret.example.yaml /tmp/devbox-review-secret.yaml
-# edit /tmp/devbox-review-secret.yaml
-kubectl apply -f /tmp/devbox-review-secret.yaml
+Required keys:
+
+```text
+REDIS_PASSWORD
+REDIS_URL
+OPENAI_API_KEY
+OPENAI_BASE_URL
+OPENREVIEW_MODEL_PROVIDER
+OPENREVIEW_MODEL
+OPENREVIEW_WORKER_CONCURRENCY
+OPENREVIEW_JOB_ATTEMPTS
+OPENREVIEW_JOB_BACKOFF_MS
+DEVBOX_JWT_SIGNING_KEY
+DEVBOX_JWT_TTL_SECONDS
+DEVBOX_ARCHIVE_AFTER_PAUSE_TIME
+DEVBOX_PAUSE_AFTER_MINUTES
+DEVBOX_COMMAND_TIMEOUT_SECONDS
+DEVBOX_STORAGE_LIMIT
+GITHUB_APP_ID
+GITHUB_APP_PRIVATE_KEY
+GITHUB_APP_WEBHOOK_SECRET
+DEVBOX_KUBECONFIG
 ```
 
-Do not commit real secrets.
+For local test deployments, render this Secret into a temporary manifest, apply
+that generated file, and do not commit it.
 
 ## Deploy
 
 ```bash
 kubectl apply -f deploy/kubernetes/namespace.yaml
-kubectl apply -f deploy/kubernetes/configmap.yaml
 kubectl apply -f /tmp/devbox-review-secret.yaml
 kubectl apply -f deploy/kubernetes/redis.yaml
 kubectl apply -f deploy/kubernetes/deployment.yaml
@@ -54,7 +66,7 @@ kubectl apply -f deploy/kubernetes/ingress.yaml
 Point your Ingress or platform HTTP route to:
 
 ```text
-Service: devbox-review-web
+Service: devbox-review
 Port: 3000
 Path: /api/webhooks
 ```
@@ -64,6 +76,15 @@ The GitHub App webhook URL should be:
 ```text
 https://your-domain.example/api/webhooks
 ```
+
+Recommended GitHub App settings:
+
+- Leave Callback URL empty unless you implement GitHub OAuth login.
+- Disable "Request user authorization during installation".
+- Disable Device Flow.
+- Leave Setup URL empty until you have an installation setup page. Do not trust the `installation_id` query parameter without verifying it through GitHub.
+- Keep webhook SSL verification enabled.
+- Subscribe to `issue_comment` and `pull_request_review_comment`.
 
 The included dev ingress uses:
 
@@ -76,12 +97,12 @@ https://devbox-review.192.168.10.189.nip.io/api/webhooks
 ```bash
 kubectl -n devbox-review get pods
 kubectl -n devbox-review get svc
-kubectl -n devbox-review logs deploy/devbox-review-web
-kubectl -n devbox-review logs deploy/devbox-review-worker
+kubectl -n devbox-review logs deploy/devbox-review
 ```
 
-Scale workers independently:
+Scale app pods carefully. Each pod starts one BullMQ worker, so effective
+concurrency is `replicas * OPENREVIEW_WORKER_CONCURRENCY`.
 
 ```bash
-kubectl -n devbox-review scale deployment/devbox-review-worker --replicas=2
+kubectl -n devbox-review scale deployment/devbox-review --replicas=2
 ```

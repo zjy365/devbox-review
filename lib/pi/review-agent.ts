@@ -194,11 +194,11 @@ const createWriteFileTool = (runtime: DevboxRuntime) =>
       "write(path, content): replace a text file in the DevBox workspace",
   });
 
-const createReplyTool = (threadId: string) =>
+const createReplyTool = (installationId: number, threadId: string) =>
   defineTool({
     description: "Post a Markdown reply to the GitHub pull request thread.",
     async execute(_toolCallId, params) {
-      await addPRComment(threadId, params.body);
+      await addPRComment(installationId, threadId, params.body);
       return textResult("Posted reply to GitHub", { threadId });
     },
     executionMode: "sequential",
@@ -260,7 +260,7 @@ export const runPiReviewAgent = async (
       createBashTool(runtime),
       createReadFileTool(runtime),
       createWriteFileTool(runtime),
-      createReplyTool(job.threadId),
+      createReplyTool(job.installationId, job.threadId),
     ],
     cwd: DEVBOX_WORKSPACE_DIR,
     model,

@@ -1,135 +1,36 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: devbox-review-web
+  name: devbox-review
   namespace: devbox-review
   labels:
     app.kubernetes.io/name: devbox-review
-    app.kubernetes.io/component: web
+    app.kubernetes.io/component: app
 spec:
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: devbox-review
-      app.kubernetes.io/component: web
+      app.kubernetes.io/component: app
   template:
     metadata:
       labels:
         app.kubernetes.io/name: devbox-review
-        app.kubernetes.io/component: web
-    spec:
-      containers:
-        - name: web
-          image: zhujingyang/devbox-review-web:latest
-          imagePullPolicy: Always
-          args:
-            - web
-          ports:
-            - name: http
-              containerPort: 3000
-          envFrom:
-            - configMapRef:
-                name: devbox-review-config
-          env:
-            - name: REDIS_URL
-              valueFrom:
-                secretKeyRef:
-                  name: devbox-review-secret
-                  key: REDIS_URL
-            - name: GITHUB_APP_ID
-              valueFrom:
-                secretKeyRef:
-                  name: devbox-review-secret
-                  key: GITHUB_APP_ID
-            - name: GITHUB_APP_PRIVATE_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: devbox-review-secret
-                  key: GITHUB_APP_PRIVATE_KEY
-            - name: GITHUB_APP_WEBHOOK_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: devbox-review-secret
-                  key: GITHUB_APP_WEBHOOK_SECRET
-          volumeMounts:
-            - name: devbox-kubeconfig
-              mountPath: /var/run/secrets/devbox
-              readOnly: true
-          readinessProbe:
-            httpGet:
-              path: /
-              port: http
-            initialDelaySeconds: 5
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
-            initialDelaySeconds: 20
-            periodSeconds: 20
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              memory: 768Mi
-      volumes:
-        - name: devbox-kubeconfig
-          secret:
-            secretName: devbox-review-secret
-            items:
-              - key: DEVBOX_KUBECONFIG
-                path: kubeconfig
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: devbox-review-web
-  namespace: devbox-review
-  labels:
-    app.kubernetes.io/name: devbox-review
-    app.kubernetes.io/component: web
-spec:
-  type: ClusterIP
-  selector:
-    app.kubernetes.io/name: devbox-review
-    app.kubernetes.io/component: web
-  ports:
-    - name: http
-      port: 3000
-      targetPort: http
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: devbox-review-worker
-  namespace: devbox-review
-  labels:
-    app.kubernetes.io/name: devbox-review
-    app.kubernetes.io/component: worker
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: devbox-review
-      app.kubernetes.io/component: worker
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: devbox-review
-        app.kubernetes.io/component: worker
+        app.kubernetes.io/component: app
     spec:
       terminationGracePeriodSeconds: 120
       containers:
-        - name: worker
-          image: zhujingyang/devbox-review-worker:latest
+        - name: app
+          image: zhujingyang/devbox-review:latest
           imagePullPolicy: Always
           args:
-            - worker
-          envFrom:
-            - configMapRef:
-                name: devbox-review-config
+            - app
+          ports:
+            - name: http
+              containerPort: 3000
           env:
+            - name: NODE_ENV
+              value: production
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
@@ -140,11 +41,67 @@ spec:
                 secretKeyRef:
                   name: devbox-review-secret
                   key: OPENAI_API_KEY
+            - name: OPENAI_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: OPENAI_BASE_URL
+            - name: OPENREVIEW_MODEL_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: OPENREVIEW_MODEL_PROVIDER
+            - name: OPENREVIEW_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: OPENREVIEW_MODEL
+            - name: OPENREVIEW_WORKER_CONCURRENCY
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: OPENREVIEW_WORKER_CONCURRENCY
+            - name: OPENREVIEW_JOB_ATTEMPTS
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: OPENREVIEW_JOB_ATTEMPTS
+            - name: OPENREVIEW_JOB_BACKOFF_MS
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: OPENREVIEW_JOB_BACKOFF_MS
             - name: DEVBOX_JWT_SIGNING_KEY
               valueFrom:
                 secretKeyRef:
                   name: devbox-review-secret
                   key: DEVBOX_JWT_SIGNING_KEY
+            - name: DEVBOX_JWT_TTL_SECONDS
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: DEVBOX_JWT_TTL_SECONDS
+            - name: DEVBOX_ARCHIVE_AFTER_PAUSE_TIME
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: DEVBOX_ARCHIVE_AFTER_PAUSE_TIME
+            - name: DEVBOX_PAUSE_AFTER_MINUTES
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: DEVBOX_PAUSE_AFTER_MINUTES
+            - name: DEVBOX_COMMAND_TIMEOUT_SECONDS
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: DEVBOX_COMMAND_TIMEOUT_SECONDS
+            - name: DEVBOX_STORAGE_LIMIT
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: DEVBOX_STORAGE_LIMIT
+                  optional: true
             - name: GITHUB_APP_ID
               valueFrom:
                 secretKeyRef:
@@ -160,20 +117,47 @@ spec:
                 secretKeyRef:
                   name: devbox-review-secret
                   key: GITHUB_APP_WEBHOOK_SECRET
-          volumeMounts:
-            - name: devbox-kubeconfig
-              mountPath: /var/run/secrets/devbox
-              readOnly: true
+            - name: DEVBOX_KUBECONFIG
+              valueFrom:
+                secretKeyRef:
+                  name: devbox-review-secret
+                  key: DEVBOX_KUBECONFIG
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            timeoutSeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            periodSeconds: 20
           resources:
             requests:
               cpu: 100m
               memory: 256Mi
             limits:
+              cpu: 500m
               memory: 1Gi
-      volumes:
-        - name: devbox-kubeconfig
-          secret:
-            secretName: devbox-review-secret
-            items:
-              - key: DEVBOX_KUBECONFIG
-                path: kubeconfig
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devbox-review
+  namespace: devbox-review
+  labels:
+    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/component: app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/component: app
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

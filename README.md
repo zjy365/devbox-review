@@ -20,7 +20,7 @@ sequenceDiagram
     participant GH as GitHub
     participant WH as Webhook Handler
     participant Q as BullMQ / Redis
-    participant W as Worker
+    participant W as App Worker
     participant DB as Sealos DevBox
     participant AI as Pi Agent
 
@@ -51,7 +51,7 @@ sequenceDiagram
 
 1. Mention your GitHub App bot in a PR comment, for example `@devbox-review`.
 2. The webhook handler enqueues a BullMQ job in Redis and returns quickly.
-3. A worker creates or resumes a Sealos DevBox and clones the PR branch.
+3. The in-process app worker creates or resumes a Sealos DevBox and clones the PR branch.
 4. A Pi agent using OpenAI reviews the diff, explores the codebase, and runs project tooling through DevBox tools.
 5. The agent posts findings as PR comments and can include GitHub suggestion blocks.
 6. If changes are made, they are committed and pushed to the PR branch.
@@ -67,7 +67,7 @@ Copy `.env.example` to `.env` and fill in real credentials:
 cp .env.example .env
 ```
 
-Start Redis, the webhook server, and the background worker:
+Start Redis and the app service:
 
 ```bash
 docker compose up --build
@@ -87,15 +87,15 @@ https://your-tunnel-domain.example/api/webhooks
 
 ### 2. Deploy with Docker
 
-Build separate images for the webhook server and background worker:
+Build the app image:
 
 ```bash
-docker build --target web -t devbox-review-web .
-docker build --target worker -t devbox-review-worker .
+docker build --target app -t devbox-review .
 ```
 
-Run the web container to receive GitHub webhooks. Mount the Sealos kubeconfig
-as a file and point `DEVBOX_KUBECONFIG_PATH` at the path inside the container:
+Run the app container to receive GitHub webhooks and process queued review jobs.
+Mount the Sealos kubeconfig as a file and point `DEVBOX_KUBECONFIG_PATH` at the
+path inside the container:
 
 ```bash
 docker run --rm -p 3000:3000 \
@@ -110,25 +110,7 @@ docker run --rm -p 3000:3000 \
   -e GITHUB_APP_ID="your-github-app-id" \
   -e GITHUB_APP_PRIVATE_KEY="your-private-key-with-newlines-escaped" \
   -e GITHUB_APP_WEBHOOK_SECRET="your-webhook-secret" \
-  devbox-review-web web
-```
-
-Run at least one worker container against the same Redis instance:
-
-```bash
-docker run --rm \
-  -v /path/to/devbox-kubeconfig.yaml:/run/secrets/devbox-kubeconfig:ro \
-  -e OPENAI_API_KEY="your-openai-api-key" \
-  -e OPENAI_BASE_URL="https://api.openai.com/v1" \
-  -e OPENREVIEW_MODEL_PROVIDER="openai" \
-  -e OPENREVIEW_MODEL="gpt-5.1" \
-  -e REDIS_URL="redis://redis:6379" \
-  -e DEVBOX_KUBECONFIG_PATH="/run/secrets/devbox-kubeconfig" \
-  -e DEVBOX_JWT_SIGNING_KEY="your-devbox-jwt-signing-key" \
-  -e GITHUB_APP_ID="your-github-app-id" \
-  -e GITHUB_APP_PRIVATE_KEY="your-private-key-with-newlines-escaped" \
-  -e GITHUB_APP_WEBHOOK_SECRET="your-webhook-secret" \
-  devbox-review-worker worker
+  devbox-review app
 ```
 
 The app listens on port `3000`. When running behind a public domain or tunnel, configure your GitHub App webhook URL as:
@@ -137,13 +119,30 @@ The app listens on port `3000`. When running behind a public domain or tunnel, c
 https://your-domain.example/api/webhooks
 ```
 
-`REDIS_URL` is required by both roles. The web container receives webhooks and enqueues jobs; worker containers process them asynchronously. GitHub App installation IDs are read from signed webhook payloads and persisted with thread/job state, so you do not configure them manually.
+`REDIS_URL` is required. The app process receives webhooks, enqueues jobs, and
+starts a BullMQ worker in the same Next.js server process. GitHub App
+installation IDs are read from signed webhook payloads and persisted with
+thread/job state, so you do not configure them manually.
 
 ### 3. Create a GitHub App
 
 Create a new [GitHub App](https://github.com/settings/apps/new) with the following configuration:
 
+**Homepage URL**: your deployed app homepage.
+
+**Callback URL**: leave blank unless you add a GitHub OAuth login or account-binding flow.
+
+**Request user authorization during installation**: disabled. DevBox Review acts as an installation, not as the installing user.
+
+**Enable Device Flow**: disabled. This is only needed for CLI or device-based user authorization.
+
+**Setup URL**: leave blank until you add an installation setup page. If you add one later, treat the `installation_id` query parameter as untrusted and verify it with GitHub before storing it.
+
 **Webhook URL**: `https://your-domain.example/api/webhooks`
+
+**Webhook secret**: required. The webhook handler rejects unsigned or incorrectly signed deliveries.
+
+**SSL verification**: enabled.
 
 **Repository permissions**:
 
@@ -157,7 +156,7 @@ Create a new [GitHub App](https://github.com/settings/apps/new) with the followi
 - Issue comment
 - Pull request review comment
 
-Generate a private key and webhook secret, then note your App ID. Installation IDs are read automatically from GitHub webhook payloads.
+Generate a private key and webhook secret, then note your App ID. Keep only the active private keys you still deploy with. Installation IDs are read automatically from signed GitHub webhook payloads and are not configured as environment variables.
 
 ### 4. Configure environment variables
 
@@ -181,6 +180,7 @@ create runtimes and a bearer token for that cluster.
 | `DEVBOX_ARCHIVE_AFTER_PAUSE_TIME` | Optional DevBox archive policy, defaults to `24h`                     |
 | `DEVBOX_PAUSE_AFTER_MINUTES`      | Optional runtime lease duration, defaults to `300`                    |
 | `DEVBOX_COMMAND_TIMEOUT_SECONDS`  | Optional default command timeout, defaults to `60`                    |
+| `DEVBOX_STORAGE_LIMIT`            | Optional runtime storage limit, defaults to `20Gi`                    |
 | `GITHUB_APP_ID`                   | The ID of your GitHub App                                             |
 | `GITHUB_APP_PRIVATE_KEY`          | The private key generated for your GitHub App, with `\n` for newlines |
 | `GITHUB_APP_WEBHOOK_SECRET`       | The webhook secret you configured                                     |
@@ -204,7 +204,7 @@ React with thumbs up or heart on a DevBox Review comment to approve and apply it
 
 ## Skills
 
-DevBox Review uses Pi's native progressive skill system: the agent sees skill names and descriptions up front, then reads the full `SKILL.md` only when the task matches. Skills are loaded from the review service's trusted `.agents/skills/` directory at worker runtime.
+DevBox Review uses Pi's native progressive skill system: the agent sees skill names and descriptions up front, then reads the full `SKILL.md` only when the task matches. Skills are loaded from the review service's trusted `.agents/skills/` directory at app runtime.
 
 PR branches are not treated as a trusted skill source. A pull request can still contain its own `.agents/skills/` files, but OpenReview does not automatically load those files into the reviewer agent because that would let untrusted PR code change review instructions.
 
@@ -252,30 +252,24 @@ For local Bun development, start Redis first:
 docker run --rm -p 6379:6379 redis:7-alpine
 ```
 
-Install dependencies and start the Next.js webhook/UI process:
+Install dependencies and start the Next.js app process:
 
 ```bash
 bun install
 bun run dev
 ```
 
-Run a worker in a second terminal:
-
-```bash
-bun run worker
-```
-
 For a full local integration test:
 
 1. Copy `.env.example` to `.env` and fill in real credentials.
-2. Start Redis, `bun run dev`, and `bun run worker`.
+2. Start Redis and `bun run dev`.
 3. Expose `http://localhost:3000/api/webhooks` through a public tunnel.
 4. Configure the GitHub App webhook URL to the tunnel URL.
 5. Install the GitHub App on a test repository.
 6. Open a pull request and mention the app bot in a PR comment.
-7. Watch the worker logs for DevBox creation, dependency install, Pi execution, and GitHub comment or push results.
+7. Watch the app logs for DevBox creation, dependency install, Pi execution, and GitHub comment or push results.
 
-Without real GitHub App, DevBox, Redis, and OpenAI credentials, local testing is limited to build/type/lint checks and worker startup validation.
+Without real GitHub App, DevBox, Redis, and OpenAI credentials, local testing is limited to build/type/lint checks and app startup validation.
 
 Useful checks:
 

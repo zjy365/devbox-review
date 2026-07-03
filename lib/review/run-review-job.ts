@@ -81,10 +81,10 @@ const postSkippedComment = async (
 
 Unable to access this branch: ${reason}
 
-Please ensure the OpenReview app has access to this repository and branch.
+Please ensure the RunReview app has access to this repository and branch.
 
 ---
-*Powered by [DevboxReview](https://github.com/zjy365/devbox-review)*`
+*Powered by [RunReview](https://github.com/zjy365/run-review)*`
   );
 };
 
@@ -104,7 +104,7 @@ ${errorMessage}
 \`\`\`
 
 ---
-*Powered by [DevboxReview](https://github.com/zjy365/devbox-review)*`
+*Powered by [RunReview](https://github.com/zjy365/run-review)*`
   );
 };
 
@@ -152,7 +152,7 @@ export const runReviewJob = async (job: ReviewJobData): Promise<void> => {
       await configureRuntimeGit(runtime, job.repoFullName, token);
       await commitAndPushRuntimeChanges(
         runtime,
-        "openreview: apply changes",
+        "runreview: apply changes",
         job.prBranch
       );
     }

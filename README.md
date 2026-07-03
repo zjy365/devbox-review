@@ -1,13 +1,13 @@
-# DevBox Review
+# RunReview
 
-An open-source, self-hosted AI PR review bot powered by Sealos DevBox runtimes. Connect a GitHub App, mention the bot in a pull request, and run review agents inside an isolated DevBox with real repository access.
+An open-source, self-hosted AI PR review bot with executable runtime providers. Connect a GitHub App, mention the bot in a pull request, and run review agents inside an isolated workspace with real repository access.
 
-> **Beta**: DevBox Review is early-stage. The core direction is stable: GitHub-native PR review, agentic code execution, and Sealos DevBox as the runtime boundary.
+> **Beta**: RunReview is early-stage. The core direction is stable: GitHub-native PR review, agentic code execution, and a runtime provider boundary. Sealos DevBox is the current default provider, with the architecture intended to support alternatives such as E2B.
 
-## Why DevBox Review
+## Why RunReview
 
 - **Executable reviews** — The agent can inspect code, run project tooling, edit files, and push fixes back to the PR branch.
-- **Sealos DevBox runtime** — Each review runs in an isolated DevBox instead of a hosted sandbox tied to a single vendor.
+- **Runtime provider boundary** — Each review runs in an isolated workspace. Sealos DevBox is the current default provider, and the boundary is designed for additional providers such as E2B.
 - **GitHub-native queue** — Trigger reviews from PR comments and process them asynchronously with BullMQ workers.
 - **Self-hosted by default** — Run it in your own environment with your own GitHub App, model key, and Sealos DevBox access.
 - **Extensible skills** — Ship trusted, domain-specific Pi skills with the review service.
@@ -21,41 +21,41 @@ sequenceDiagram
     participant WH as Webhook Handler
     participant Q as BullMQ / Redis
     participant W as App Worker
-    participant DB as Sealos DevBox
+    participant RT as Runtime Provider
     participant AI as Pi Agent
 
-    U->>GH: @devbox-review in PR comment
+    U->>GH: @run-review in PR comment
     GH->>WH: Webhook event
     WH->>Q: Enqueue review job
 
     W->>Q: Consume review job
     W->>GH: Check push access
-    W->>DB: Create or resume DevBox
-    DB->>DB: Clone repo on PR branch
-    DB->>DB: Install dependencies
-    DB->>DB: Configure git
+    W->>RT: Create or resume runtime
+    RT->>RT: Clone repo on PR branch
+    RT->>RT: Install dependencies
+    RT->>RT: Configure git
 
     W->>AI: Run Pi agent with PR context
-    AI->>DB: Read files, run linters, explore code
-    DB-->>AI: Command output
+    AI->>RT: Read files, run linters, explore code
+    RT-->>AI: Command output
     AI->>GH: Post comments and suggestions
     AI-->>W: Agent complete
 
-    W->>DB: Check for uncommitted changes
+    W->>RT: Check for uncommitted changes
     alt Changes made
-        W->>DB: Commit and push to PR branch
-        DB->>GH: Push changes
+        W->>RT: Commit and push to PR branch
+        RT->>GH: Push changes
     end
-    W->>DB: Pause DevBox
+    W->>RT: Pause runtime
 ```
 
-1. Mention your GitHub App bot in a PR comment, for example `@devbox-review`.
+1. Mention your GitHub App bot in a PR comment, for example `@run-review`.
 2. The webhook handler enqueues a BullMQ job in Redis and returns quickly.
-3. The in-process app worker creates or resumes a Sealos DevBox and clones the PR branch.
-4. A Pi agent using OpenAI reviews the diff, explores the codebase, and runs project tooling through DevBox tools.
+3. The in-process app worker creates or resumes a runtime provider and clones the PR branch.
+4. A Pi agent using OpenAI reviews the diff, explores the codebase, and runs project tooling through runtime tools.
 5. The agent posts findings as PR comments and can include GitHub suggestion blocks.
 6. If changes are made, they are committed and pushed to the PR branch.
-7. The DevBox is paused after the job finishes.
+7. The runtime is paused after the job finishes.
 
 ## Setup
 
@@ -90,7 +90,7 @@ https://your-tunnel-domain.example/api/webhooks
 Build the app image:
 
 ```bash
-docker build --target app -t devbox-review .
+docker build --target app -t run-review .
 ```
 
 Run the app container to receive GitHub webhooks and process queued review jobs.
@@ -110,7 +110,7 @@ docker run --rm -p 3000:3000 \
   -e GITHUB_APP_ID="your-github-app-id" \
   -e GITHUB_APP_PRIVATE_KEY="your-private-key-with-newlines-escaped" \
   -e GITHUB_APP_WEBHOOK_SECRET="your-webhook-secret" \
-  devbox-review app
+  run-review app
 ```
 
 The app listens on port `3000`. When running behind a public domain or tunnel, configure your GitHub App webhook URL as:
@@ -132,7 +132,7 @@ Create a new [GitHub App](https://github.com/settings/apps/new) with the followi
 
 **Callback URL**: leave blank unless you add a GitHub OAuth login or account-binding flow.
 
-**Request user authorization during installation**: disabled. DevBox Review acts as an installation, not as the installing user.
+**Request user authorization during installation**: disabled. RunReview acts as an installation, not as the installing user.
 
 **Enable Device Flow**: disabled. This is only needed for CLI or device-based user authorization.
 
@@ -162,8 +162,11 @@ Generate a private key and webhook secret, then note your App ID. Keep only the 
 
 Copy `.env.example` to `.env` for local development and fill in the values for
 your own GitHub App, Sealos kubeconfig, Redis, and OpenAI account. The
-kubeconfig current context must include the namespace where DevBox Review should
+kubeconfig current context must include the namespace where RunReview should
 create runtimes and a bearer token for that cluster.
+
+The `OPENREVIEW_*` environment variable names are retained for compatibility
+with the original project and existing deployments.
 
 | Variable                          | Description                                                           |
 | --------------------------------- | --------------------------------------------------------------------- |
@@ -188,25 +191,25 @@ create runtimes and a bearer token for that cluster.
 
 ### 5. Install the GitHub App
 
-Install the GitHub App on the repositories you want DevBox Review to monitor. Once installed, mention the app bot in any PR comment to trigger a review.
+Install the GitHub App on the repositories you want RunReview to monitor. Once installed, mention the app bot in any PR comment to trigger a review.
 
 ## Usage
 
 Trigger a review by mentioning your GitHub App bot in a PR comment:
 
 ```text
-@devbox-review check for security vulnerabilities
-@devbox-review run the linter and fix any issues
-@devbox-review explain how the authentication flow works
+@run-review check for security vulnerabilities
+@run-review run the linter and fix any issues
+@run-review explain how the authentication flow works
 ```
 
-React with thumbs up or heart on a DevBox Review comment to approve and apply its suggestions. React with thumbs down or confused to skip.
+React with thumbs up or heart on a RunReview comment to approve and apply its suggestions. React with thumbs down or confused to skip.
 
 ## Skills
 
-DevBox Review uses Pi's native progressive skill system: the agent sees skill names and descriptions up front, then reads the full `SKILL.md` only when the task matches. Skills are loaded from the review service's trusted `.agents/skills/` directory at app runtime.
+RunReview uses Pi's native progressive skill system: the agent sees skill names and descriptions up front, then reads the full `SKILL.md` only when the task matches. Skills are loaded from the review service's trusted `.agents/skills/` directory at app runtime.
 
-PR branches are not treated as a trusted skill source. A pull request can still contain its own `.agents/skills/` files, but OpenReview does not automatically load those files into the reviewer agent because that would let untrusted PR code change review instructions.
+PR branches are not treated as a trusted skill source. A pull request can still contain its own `.agents/skills/` files, but RunReview does not automatically load those files into the reviewer agent because that would let untrusted PR code change review instructions.
 
 Create a folder in `.agents/skills/` with a `SKILL.md` file containing YAML frontmatter:
 
@@ -232,7 +235,7 @@ Your specialized review instructions here.
 - [Next.js](https://nextjs.org) — App framework
 - [BullMQ](https://docs.bullmq.io/) — Redis-backed async job queue
 - [Pi](https://pi.dev/) — Coding agent runtime
-- Sealos DevBox — Isolated code execution
+- Sealos DevBox — Current isolated runtime provider
 - OpenAI — Default model provider
 - [Chat SDK](https://www.npmjs.com/package/chat) — GitHub webhook handling
 - [Octokit](https://github.com/octokit/octokit.js) — GitHub API client
@@ -280,7 +283,7 @@ bun run build
 
 ## Attribution
 
-DevBox Review is based on [Vercel Labs OpenReview](https://github.com/vercel-labs/openreview), which is licensed under MIT. This project replaces the Vercel Sandbox runtime with Sealos DevBox and evolves independently.
+RunReview is based on [Vercel Labs OpenReview](https://github.com/vercel-labs/openreview), which is licensed under MIT. This project replaces the Vercel Sandbox runtime with Sealos DevBox and evolves independently.
 
 ## License
 

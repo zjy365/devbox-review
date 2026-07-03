@@ -1,27 +1,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: devbox-review
-  namespace: devbox-review
+  name: run-review
+  namespace: run-review
   labels:
-    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/name: run-review
     app.kubernetes.io/component: app
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: devbox-review
+      app.kubernetes.io/name: run-review
       app.kubernetes.io/component: app
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: devbox-review
+        app.kubernetes.io/name: run-review
         app.kubernetes.io/component: app
     spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: app
-          image: zhujingyang/devbox-review:latest
+          image: zhujingyang/run-review:latest
           imagePullPolicy: Always
           args:
             - app
@@ -34,93 +34,93 @@ spec:
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: REDIS_URL
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: OPENAI_API_KEY
             - name: OPENAI_BASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: OPENAI_BASE_URL
             - name: OPENREVIEW_MODEL_PROVIDER
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: OPENREVIEW_MODEL_PROVIDER
             - name: OPENREVIEW_MODEL
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: OPENREVIEW_MODEL
             - name: OPENREVIEW_WORKER_CONCURRENCY
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: OPENREVIEW_WORKER_CONCURRENCY
             - name: OPENREVIEW_JOB_ATTEMPTS
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: OPENREVIEW_JOB_ATTEMPTS
             - name: OPENREVIEW_JOB_BACKOFF_MS
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: OPENREVIEW_JOB_BACKOFF_MS
             - name: DEVBOX_JWT_SIGNING_KEY
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: DEVBOX_JWT_SIGNING_KEY
             - name: DEVBOX_JWT_TTL_SECONDS
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: DEVBOX_JWT_TTL_SECONDS
             - name: DEVBOX_ARCHIVE_AFTER_PAUSE_TIME
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: DEVBOX_ARCHIVE_AFTER_PAUSE_TIME
             - name: DEVBOX_PAUSE_AFTER_MINUTES
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: DEVBOX_PAUSE_AFTER_MINUTES
             - name: DEVBOX_COMMAND_TIMEOUT_SECONDS
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: DEVBOX_COMMAND_TIMEOUT_SECONDS
             - name: DEVBOX_STORAGE_LIMIT
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: DEVBOX_STORAGE_LIMIT
                   optional: true
             - name: GITHUB_APP_ID
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: GITHUB_APP_ID
             - name: GITHUB_APP_PRIVATE_KEY
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: GITHUB_APP_PRIVATE_KEY
             - name: GITHUB_APP_WEBHOOK_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: GITHUB_APP_WEBHOOK_SECRET
             - name: DEVBOX_KUBECONFIG
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: DEVBOX_KUBECONFIG
           readinessProbe:
             httpGet:
@@ -147,15 +147,15 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: devbox-review
-  namespace: devbox-review
+  name: run-review
+  namespace: run-review
   labels:
-    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/name: run-review
     app.kubernetes.io/component: app
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/name: run-review
     app.kubernetes.io/component: app
   ports:
     - name: http

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "openreview",
+      "name": "run-review",
       "dependencies": {
         "@chat-adapter/github": "^4.15.0",
         "@chat-adapter/state-memory": "^4.15.0",

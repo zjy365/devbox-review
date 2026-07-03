@@ -23,8 +23,8 @@ const workflow = [
     label: "Queue",
   },
   {
-    description: "A worker starts or reuses a Sealos DevBox runtime.",
-    label: "DevBox",
+    description: "A worker starts or reuses an isolated runtime provider.",
+    label: "Runtime",
   },
   {
     description: "Pi runs the agent with OpenAI and writes back to the PR.",
@@ -35,16 +35,11 @@ const workflow = [
 const facts = [
   "GitHub-native review",
   "Durable job queue",
-  "Sealos DevBox runtime",
+  "Runtime provider boundary",
   "OpenAI model provider",
 ];
 
-const setupCommands = [
-  "cp .env.example .env.local",
-  "docker run --rm -p 6379:6379 redis:7-alpine",
-  "bun run dev",
-  "bun run worker",
-];
+const setupCommands = ["cp .env.example .env", "docker compose up --build"];
 
 const runtimeItems = [
   {
@@ -53,7 +48,7 @@ const runtimeItems = [
   },
   {
     Icon: Box,
-    text: "Sealos DevBox handles clone, install, inspect, test, and edit.",
+    text: "Sealos DevBox is the current default provider for clone, install, inspect, test, and edit.",
   },
   {
     Icon: Database,
@@ -98,11 +93,11 @@ export const HomePage = () => {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-4">
           <Link className="flex items-center gap-2 font-semibold" href="/">
             <Bot aria-hidden="true" className="size-5" />
-            DevBox Review
+            RunReview
           </Link>
           <motion.a
             className="inline-flex min-h-9 items-center gap-2 rounded-md border border-border/80 px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-            href="https://github.com/zjy365/devbox-review"
+            href="https://github.com/zjy365/run-review"
             rel="noreferrer"
             target="_blank"
             whileHover={shouldReduceMotion ? undefined : { y: -1 }}
@@ -138,16 +133,16 @@ export const HomePage = () => {
             transition={transition}
             variants={entrance}
           >
-            Self-hosted AI PR review, running on Sealos DevBox.
+            Executable PR reviews on your own runtime.
           </motion.h1>
           <motion.p
             className="mt-5 max-w-2xl text-pretty text-lg leading-8 text-muted-foreground"
             transition={transition}
             variants={entrance}
           >
-            DevBox Review is an open-source GitHub App for pull request review.
-            It runs review jobs with Redis, BullMQ, Pi, OpenAI, and your own
-            Sealos DevBox.
+            RunReview is an open-source GitHub App for pull request review. It
+            runs review jobs with Redis, BullMQ, Pi, OpenAI, and your own
+            runtime provider.
           </motion.p>
 
           <motion.div
@@ -191,7 +186,8 @@ export const HomePage = () => {
               </h2>
               <p className="mt-3 text-pretty leading-7 text-muted-foreground">
                 The app stays close to GitHub. The worker owns the execution
-                path, while DevBox provides the isolated workspace.
+                path, while the runtime provider supplies the isolated
+                workspace.
               </p>
             </motion.div>
             <ol className="grid gap-3">
@@ -261,10 +257,13 @@ export const HomePage = () => {
 
       <footer className="border-t border-border/70">
         <div className="mx-auto flex max-w-5xl flex-col gap-2 px-5 py-6 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>Open-source PR review infrastructure, built around DevBox.</p>
+          <p>
+            Open-source PR review infrastructure, built around executable
+            runtimes.
+          </p>
           <a
             className="font-medium text-foreground underline-offset-4 hover:underline"
-            href="https://github.com/zjy365/devbox-review#readme"
+            href="https://github.com/zjy365/run-review#readme"
             rel="noreferrer"
             target="_blank"
           >

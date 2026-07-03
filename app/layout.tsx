@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   description:
-    "An open-source, self-hosted AI PR review bot powered by Sealos DevBox runtimes.",
-  title: "DevBox Review",
+    "An open-source, self-hosted AI PR review bot with executable runtime providers.",
+  title: "RunReview",
 };
 
 export default function RootLayout({

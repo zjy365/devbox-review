@@ -22,7 +22,7 @@ import type { DevboxInfo, DevboxExecResult } from "@/lib/devbox/types";
 
 export const DEVBOX_WORKSPACE_DIR = "/home/devbox/project";
 
-const DEVBOX_NAME_PREFIX = "devbox-review";
+const DEVBOX_NAME_PREFIX = "run-review";
 const GITHUB_CLI_INSTALL_TIMEOUT_SECONDS = 180;
 const DEPENDENCY_INSTALL_TIMEOUT_SECONDS = 600;
 const GIT_COMMAND_TIMEOUT_SECONDS = 120;
@@ -294,7 +294,7 @@ export const createDevboxRuntime = async (
       DEVBOX_REVIEW_WORKSPACE: DEVBOX_WORKSPACE_DIR,
     },
     labels: [
-      { key: "app.kubernetes.io/managed-by", value: "devbox-review" },
+      { key: "app.kubernetes.io/managed-by", value: "run-review" },
       { key: "app.kubernetes.io/component", value: "agent-runtime" },
     ],
     name,
@@ -370,8 +370,8 @@ export const configureRuntimeGit = async (
   const command = [
     `git remote set-url origin ${shellQuote(remoteUrl)}`,
     "git config --local core.hooksPath /dev/null",
-    "git config user.name devbox-review[bot]",
-    "git config user.email devbox-review[bot]@users.noreply.github.com",
+    "git config user.name run-review[bot]",
+    "git config user.email run-review[bot]@users.noreply.github.com",
     `printf %s ${shellQuote(token)} | gh auth login --with-token`,
   ].join("\n");
 

@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: devbox-review-redis
-  namespace: devbox-review
+  name: run-review-redis
+  namespace: run-review
   labels:
-    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/name: run-review
     app.kubernetes.io/component: redis
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: devbox-review
+      app.kubernetes.io/name: run-review
       app.kubernetes.io/component: redis
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: devbox-review
+        app.kubernetes.io/name: run-review
         app.kubernetes.io/component: redis
     spec:
       containers:
@@ -30,7 +30,7 @@ spec:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: devbox-review-secret
+                  name: run-review-secret
                   key: REDIS_PASSWORD
           ports:
             - name: redis
@@ -64,20 +64,20 @@ spec:
       volumes:
         - name: redis-data
           persistentVolumeClaim:
-            claimName: devbox-review-redis-data
+            claimName: run-review-redis-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: devbox-review-redis
-  namespace: devbox-review
+  name: run-review-redis
+  namespace: run-review
   labels:
-    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/name: run-review
     app.kubernetes.io/component: redis
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/name: run-review
     app.kubernetes.io/component: redis
   ports:
     - name: redis
@@ -87,10 +87,10 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: devbox-review-redis-data
-  namespace: devbox-review
+  name: run-review-redis-data
+  namespace: run-review
   labels:
-    app.kubernetes.io/name: devbox-review
+    app.kubernetes.io/name: run-review
     app.kubernetes.io/component: redis
 spec:
   accessModes:

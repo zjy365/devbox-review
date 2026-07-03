@@ -1,6 +1,6 @@
 # Kubernetes Deployment
 
-This directory deploys DevBox Review with the production shape:
+This directory deploys RunReview with the production shape:
 
 - one app image
 - one public `app` Deployment and Service
@@ -14,7 +14,7 @@ also starts the BullMQ worker and consumes jobs from Redis.
 ```bash
 docker buildx build --platform linux/amd64 \
   --target app \
-  -t zhujingyang/devbox-review:latest \
+  -t zhujingyang/run-review:latest \
   --push .
 ```
 
@@ -23,7 +23,7 @@ For production, use an immutable tag instead of `latest`, then update `deploymen
 ## Configure environment
 
 The Kubernetes manifests read runtime configuration from a Secret named
-`devbox-review-secret`. Create it from your local `.env` and kubeconfig before
+`run-review-secret`. Create it from your local `.env` and kubeconfig before
 applying the Deployments.
 
 Required keys:
@@ -57,7 +57,7 @@ that generated file, and do not commit it.
 
 ```bash
 kubectl apply -f deploy/kubernetes/namespace.yaml
-kubectl apply -f /tmp/devbox-review-secret.yaml
+kubectl apply -f /tmp/run-review-secret.yaml
 kubectl apply -f deploy/kubernetes/redis.yaml
 kubectl apply -f deploy/kubernetes/deployment.yaml
 kubectl apply -f deploy/kubernetes/ingress.yaml
@@ -66,7 +66,7 @@ kubectl apply -f deploy/kubernetes/ingress.yaml
 Point your Ingress or platform HTTP route to:
 
 ```text
-Service: devbox-review
+Service: run-review
 Port: 3000
 Path: /api/webhooks
 ```
@@ -89,20 +89,20 @@ Recommended GitHub App settings:
 The included dev ingress uses:
 
 ```text
-https://devbox-review.192.168.10.189.nip.io/api/webhooks
+https://run-review.192.168.10.189.nip.io/api/webhooks
 ```
 
 ## Verify
 
 ```bash
-kubectl -n devbox-review get pods
-kubectl -n devbox-review get svc
-kubectl -n devbox-review logs deploy/devbox-review
+kubectl -n run-review get pods
+kubectl -n run-review get svc
+kubectl -n run-review logs deploy/run-review
 ```
 
 Scale app pods carefully. Each pod starts one BullMQ worker, so effective
 concurrency is `replicas * OPENREVIEW_WORKER_CONCURRENCY`.
 
 ```bash
-kubectl -n devbox-review scale deployment/devbox-review --replicas=2
+kubectl -n run-review scale deployment/run-review --replicas=2
 ```

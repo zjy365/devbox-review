@@ -1,4 +1,4 @@
-export const REVIEW_QUEUE_NAME = "openreview-review-jobs";
+export const REVIEW_QUEUE_NAME = "runreview-review-jobs";
 export const REVIEW_JOB_NAME = "review-pr";
 
 export interface ThreadMessage {

@@ -34,7 +34,7 @@ export const getInstallationOctokit = (
 };
 
 export const getConfiguredAppSlug = (): string =>
-  env.GITHUB_APP_SLUG ?? "devbox-review-dev";
+  env.GITHUB_APP_SLUG ?? "run-review-dev";
 
 export const getAppInfo = async (): Promise<{
   botUserId: number;

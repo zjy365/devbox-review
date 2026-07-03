@@ -26,7 +26,7 @@ import type { DevboxRuntime } from "@/lib/runtime/devbox";
 
 const MAX_TOOL_OUTPUT_CHARS = 20_000;
 const AGENT_COMMAND_TIMEOUT_SECONDS = 600;
-const OPENREVIEW_AGENT_DIR = "/tmp/openreview-pi";
+const RUNREVIEW_AGENT_DIR = "/tmp/runreview-pi";
 const TRUSTED_SKILLS_DIR = resolve(process.cwd(), ".agents/skills");
 
 const isTrustedSkillPath = (path: string): boolean => {
@@ -52,7 +52,7 @@ const truncate = (value: string): string => {
 
 const buildSystemPrompt = (
   job: ReviewJobData
-): string => `You are OpenReview, an autonomous GitHub pull request review agent.
+): string => `You are RunReview, an autonomous GitHub pull request review agent.
 
 Repository: ${job.repoFullName}
 Pull request: #${job.prNumber}
@@ -95,7 +95,7 @@ const createResourceLoader = async (
 ) => {
   const resourceLoader = new DefaultResourceLoader({
     additionalSkillPaths: [TRUSTED_SKILLS_DIR],
-    agentDir: OPENREVIEW_AGENT_DIR,
+    agentDir: RUNREVIEW_AGENT_DIR,
     appendSystemPromptOverride: () => [],
     cwd: DEVBOX_WORKSPACE_DIR,
     noContextFiles: true,
@@ -148,7 +148,7 @@ const createBashTool = (runtime: DevboxRuntime) =>
 const createReadFileTool = (runtime: DevboxRuntime) =>
   defineTool({
     description:
-      "Read a text file from the repository workspace inside the Sealos DevBox, or a trusted OpenReview skill file when the path is under the advertised skills directory.",
+      "Read a text file from the repository workspace inside the Sealos DevBox, or a trusted RunReview skill file when the path is under the advertised skills directory.",
     async execute(_toolCallId, params) {
       if (isTrustedSkillPath(params.path)) {
         const content = await readFile(params.path, "utf8");
@@ -254,7 +254,7 @@ export const runPiReviewAgent = async (
   );
 
   const { session } = await createAgentSession({
-    agentDir: OPENREVIEW_AGENT_DIR,
+    agentDir: RUNREVIEW_AGENT_DIR,
     authStorage,
     customTools: [
       createBashTool(runtime),
